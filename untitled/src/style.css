@@ -1,0 +1,528 @@
+"en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doodle Blocker!</title>
+    <!-- Tailwind CSS CDN for basic styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a kid-like font -->
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=s<!DOCTYPE html>
+<html lang=wap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Permanent Marker', cursive; /* Apply the kid-like font */
+            background-color: #ffe0b2; /* Light orange/peach background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .game-container {
+            background-color: #ffffff; /* White canvas background */
+            border: 8px solid #a0522d; /* Sienna border for a crayon effect */
+            border-radius: 20px; /* Rounded corners for the game board */
+            box-shadow: 10px 10px 0px rgba(0, 0, 0, 0.2), /* Basic shadow */
+                        -5px -5px 0px #ff6347; /* Tomato color for a crayon-like offset shadow */
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 90vw; /* Responsive width */
+            max-height: 90vh; /* Responsive height */
+            box-sizing: border-box; /* Include padding in width/height */
+        }
+        canvas {
+            background-color: #f8f8f8; /* Slightly off-white for canvas */
+            display: block;
+            border: 4px dashed #6b8e23; /* Olive green dashed border for a notebook page effect */
+            border-radius: 10px;
+            touch-action: none; /* Prevent browser default touch actions like scrolling/zooming */
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .game-button {
+            background-color: #87ceeb; /* Sky blue */
+            color: #ffffff;
+            font-size: 1.25rem; /* Large text */
+            padding: 10px 25px;
+            border: 4px solid #4682b4; /* Steel blue darker border */
+            border-radius: 15px;
+            box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.2);
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            cursor: pointer;
+            text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.1);
+        }
+        .game-button:active {
+            transform: translateY(3px) translateX(3px);
+            box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
+        }
+        .score-board {
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+            color: #4b0082; /* Indigo color */
+            text-shadow: 2px 2px 0px rgba(255, 255, 0, 0.5); /* Yellow shadow */
+        }
+        .message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 6px solid #8b4513; /* Saddle brown */
+            border-radius: 20px;
+            padding: 30px 40px;
+            text-align: center;
+            font-size: 2rem;
+            color: #8b4513;
+            box-shadow: 10px 10px 0px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+            display: none; /* Hidden by default */
+        }
+        .message-box button {
+            margin-top: 20px;
+        }
+        @media (max-width: 768px) {
+            .game-container {
+                padding: 10px;
+                border-width: 4px;
+                border-radius: 10px;
+            }
+            .score-board {
+                font-size: 1.2rem;
+            }
+            .game-button {
+                font-size: 1rem;
+                padding: 8px 15px;
+                border-width: 3px;
+                border-radius: 10px;
+            }
+            .message-box {
+                font-size: 1.5rem;
+                padding: 20px 30px;
+                border-width: 4px;
+                border-radius: 15px;
+            }
+            .button-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score-board" id="scoreBoard">Score: 0 | Misses: 0</div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="button-group">
+            <button id="startButton" class="game-button">Start Game</button>
+            <button id="clearButton" class="game-button">Clear Drawing</button>
+        </div>
+    </div>
+
+    <!-- Message Box for game over/instructions -->
+    <div id="messageBox" class="message-box">
+        <p id="messageText"></p>
+        <button id="restartButton" class="game-button">Play Again!</button>
+    </div>
+
+    <script>
+        // Get references to canvas and its context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Elements
+        const scoreBoard = document.getElementById('scoreBoard');
+        const startButton = document.getElementById('startButton');
+        const clearButton = document.getElementById('clearButton');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const restartButton = document.getElementById('restartButton');
+
+        // Game State Variables
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let drawnLines = []; // Stores objects like { x1, y1, x2, y2 }
+        let doodles = []; // Stores objects like { x, y, radius, color, speed }
+        let score = 0;
+        let misses = 0;
+        const maxMisses = 10; // Max misses before game over
+        let gameActive = false;
+        let doodleInterval; // To control doodle spawning
+
+        // Canvas dimensions - will be set dynamically
+        let CANVAS_WIDTH = 600;
+        let CANVAS_HEIGHT = 400;
+
+        // Doodle properties
+        const doodleRadius = 15;
+        const doodleColors = ['#ff69b4', '#00ced1', '#ffd700', '#7cfc00', '#9932cc', '#ff8c00']; // Bright, fun colors
+        const doodleSpeedMin = 1.5;
+        const doodleSpeedMax = 3;
+        const doodleSpawnRate = 1000; // milliseconds between doodles
+
+        // Scoring Zones at the bottom
+        const scoringZones = [
+            { x: 50, width: 80, color: '#4682b4', isScoring: true }, // Blue zone
+            { x: 200, width: 80, color: '#b22222', isScoring: true }, // Red zone
+            { x: 350, width: 80, color: '#32cd32', isScoring: true }  // Green zone
+            // X values are relative to CANVAS_WIDTH, will be scaled
+        ];
+        const zoneHeight = 30; // Height of the scoring zones
+        const zoneY = CANVAS_HEIGHT - zoneHeight; // Y position of the top of the zones (calculated dynamically)
+
+        // --- Utility Functions ---
+
+        // Function to set canvas dimensions responsively
+        function setCanvasDimensions() {
+            // Get the parent container's dimensions
+            const container = canvas.parentElement;
+            // Set canvas display size to fill container, with a max ratio
+            const aspectRatio = 3 / 2; // Desired width/height ratio
+            let newWidth = container.clientWidth * 0.9; // 90% of parent width
+            let newHeight = newWidth / aspectRatio;
+
+            // Ensure it doesn't exceed screen height too much
+            const maxAllowedHeight = window.innerHeight * 0.7; // Max 70% of viewport height
+            if (newHeight > maxAllowedHeight) {
+                newHeight = maxAllowedHeight;
+                newWidth = newHeight * aspectRatio;
+            }
+
+            // Set the canvas element's drawing buffer size (important for clarity)
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+
+            // Update global constants for game logic
+            CANVAS_WIDTH = newWidth;
+            CANVAS_HEIGHT = newHeight;
+
+            // Recalculate zone Y position
+            scoringZones.forEach(zone => {
+                 zone.y = CANVAS_HEIGHT - zoneHeight;
+                 // Adjust zone X to be relative to the new canvas width
+                 // This assumes the initial x values were based on a specific CANVAS_WIDTH,
+                 // For now, let's keep them as fixed pixels and just scale later if needed.
+                 // For now, assuming initial scoringZones.x were percentages or designed for 600 width
+            });
+        }
+
+        // Initialize canvas size on load and resize
+        window.addEventListener('load', setCanvasDimensions);
+        window.addEventListener('resize', setCanvasDimensions);
+
+        // Get a random color for doodles
+        function getRandomColor() {
+            return doodleColors[Math.floor(Math.random() * doodleColors.length)];
+        }
+
+        // Get a random speed for doodles
+        function getRandomSpeed() {
+            return Math.random() * (doodleSpeedMax - doodleSpeedMin) + doodleSpeedMin;
+        }
+
+        // Show a message box
+        function showMessage(text) {
+            messageText.textContent = text;
+            messageBox.style.display = 'block';
+        }
+
+        // Hide the message box
+        function hideMessageBox() {
+            messageBox.style.display = 'none';
+        }
+
+        // --- Game Drawing Functions ---
+
+        // Draw a single doodle
+        function drawDoodle(doodle) {
+            ctx.beginPath();
+            ctx.arc(doodle.x, doodle.y, doodle.radius, 0, Math.PI * 2);
+            ctx.fillStyle = doodle.color;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#333'; // Doodle outline
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        // Draw all drawn lines
+        function drawLines() {
+            ctx.lineWidth = 10; // Thick, crayon-like lines
+            ctx.lineCap = 'round'; // Rounded ends
+            ctx.lineJoin = 'round'; // Rounded joins
+            ctx.strokeStyle = '#000'; // Black crayon color (can be randomized)
+
+            drawnLines.forEach(line => {
+                ctx.beginPath();
+                ctx.moveTo(line.x1, line.y1);
+                ctx.lineTo(line.x2, line.y2);
+                ctx.stroke();
+                ctx.closePath();
+            });
+        }
+
+        // Draw scoring zones
+        function drawScoringZones() {
+            scoringZones.forEach(zone => {
+                ctx.fillStyle = zone.color + '80'; // Add transparency
+                ctx.fillRect(zone.x, zone.y, zone.width, zoneHeight);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = zone.color;
+                ctx.strokeRect(zone.x, zone.y, zone.width, zoneHeight);
+
+                // Add text label for fun
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${zoneHeight * 0.6}px 'Permanent Marker'`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('GOAL!', zone.x + zone.width / 2, zone.y + zoneHeight / 2);
+            });
+        }
+
+        // --- Game Logic Functions ---
+
+        // Start a new game
+        function startGame() {
+            resetGame();
+            gameActive = true;
+            hideMessageBox();
+            startButton.disabled = true; // Disable start button during game
+            clearButton.disabled = false; // Enable clear button during game
+
+            // Start spawning doodles
+            doodleInterval = setInterval(spawnDoodle, doodleSpawnRate);
+
+            // Start the game loop
+            gameLoop();
+        }
+
+        // Reset game state
+        function resetGame() {
+            doodles = [];
+            drawnLines = []; // Clear drawings too on reset
+            score = 0;
+            misses = 0;
+            updateScoreBoard();
+            if (doodleInterval) {
+                clearInterval(doodleInterval);
+            }
+        }
+
+        // Update score display
+        function updateScoreBoard() {
+            scoreBoard.textContent = `Score: ${score} | Misses: ${misses}`;
+        }
+
+        // Spawn a new doodle
+        function spawnDoodle() {
+            // Random x position within canvas bounds
+            const x = Math.random() * (CANVAS_WIDTH - doodleRadius * 2) + doodleRadius;
+            doodles.push({
+                x: x,
+                y: -doodleRadius, // Start above the canvas
+                radius: doodleRadius,
+                color: getRandomColor(),
+                speed: getRandomSpeed()
+            });
+        }
+
+        // Check collision between a doodle and a line segment
+        function lineCircleCollide(doodle, line) {
+            const dx = line.x2 - line.x1;
+            const dy = line.y2 - line.y1;
+            const lenSq = dx * dx + dy * dy;
+            let t = ((doodle.x - line.x1) * dx + (doodle.y - line.y1) * dy) / lenSq;
+
+            t = Math.max(0, Math.min(1, t)); // Clamp t between 0 and 1
+
+            const closestX = line.x1 + t * dx;
+            const closestY = line.y1 + t * dy;
+
+            const distSq = (doodle.x - closestX) * (doodle.x - closestX) +
+                           (doodle.y - closestY) * (doodle.y - closestY);
+
+            return distSq <= (doodle.radius * doodle.radius);
+        }
+
+        // Game Over condition
+        function gameOver() {
+            gameActive = false;
+            clearInterval(doodleInterval);
+            startButton.disabled = false; // Re-enable start button
+            clearButton.disabled = false; // Re-enable clear button
+            showMessage(`Game Over! You scored ${score} points!`);
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (!gameActive) return; // Stop if game is not active
+
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear canvas
+
+            drawScoringZones(); // Draw zones first
+            drawLines(); // Draw player's lines
+
+            // Update and draw doodles
+            for (let i = doodles.length - 1; i >= 0; i--) {
+                const doodle = doodles[i];
+                doodle.y += doodle.speed; // Move doodle down
+
+                // Check collision with drawn lines
+                let hitLine = false;
+                for (const line of drawnLines) {
+                    if (lineCircleCollide(doodle, line)) {
+                        // Doodle hit a line, remove it (blocked)
+                        hitLine = true;
+                        doodles.splice(i, 1);
+                        // Optionally add a "splat" effect or sound here
+                        break;
+                    }
+                }
+
+                if (hitLine) continue; // If blocked, go to next doodle
+
+                // Check if doodle entered a scoring zone
+                const doodleBottom = doodle.y + doodle.radius;
+                const doodleTop = doodle.y - doodle.radius;
+
+                if (doodleBottom >= zoneY && doodleTop < (zoneY + zoneHeight)) {
+                    let scored = false;
+                    for (const zone of scoringZones) {
+                        if (doodle.x >= zone.x && doodle.x <= (zone.x + zone.width)) {
+                            // Doodle landed in a scoring zone
+                            score += 1;
+                            updateScoreBoard();
+                            doodles.splice(i, 1); // Remove scored doodle
+                            scored = true;
+                            break;
+                        }
+                    }
+                    if (scored) continue; // If scored, go to next doodle
+                }
+
+
+                // Check if doodle went off screen (miss)
+                if (doodle.y - doodle.radius > CANVAS_HEIGHT) {
+                    misses += 1;
+                    updateScoreBoard();
+                    doodles.splice(i, 1); // Remove missed doodle
+
+                    if (misses >= maxMisses) {
+                        gameOver();
+                    }
+                } else {
+                    drawDoodle(doodle); // Only draw if still on screen
+                }
+            }
+
+            requestAnimationFrame(gameLoop); // Continue the loop
+        }
+
+        // --- Event Listeners for Drawing ---
+
+        // Get mouse/touch coordinates relative to canvas
+        function getEventPos(event) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (event.touches) { // For touch events
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else { // For mouse events
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!gameActive) return; // Only allow drawing during active game
+            const pos = getEventPos(e);
+            isDrawing = true;
+            lastX = pos.x;
+            lastY = pos.y;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameActive || !isDrawing) return;
+            const pos = getEventPos(e);
+            // Draw a segment and add to lines array
+            drawnLines.push({ x1: lastX, y1: lastY, x2: pos.x, y2: pos.y });
+            lastX = pos.x;
+            lastY = pos.y;
+            // Redraw immediately to show drawing feedback
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawScoringZones();
+            drawLines();
+            doodles.forEach(drawDoodle); // Redraw doodles too
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        canvas.addEventListener('mouseout', () => { // Stop drawing if mouse leaves canvas
+            isDrawing = false;
+        });
+
+        // --- Event Listeners for Touch Drawing ---
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling/zooming on touch
+            if (!gameActive) return;
+            const pos = getEventPos(e);
+            isDrawing = true;
+            lastX = pos.x;
+            lastY = pos.y;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling/zooming on touch
+            if (!gameActive || !isDrawing) return;
+            const pos = getEventPos(e);
+            drawnLines.push({ x1: lastX, y1: lastY, x2: pos.x, y2: pos.y });
+            lastX = pos.x;
+            lastY = pos.y;
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawScoringZones();
+            drawLines();
+            doodles.forEach(drawDoodle);
+        });
+
+        canvas.addEventListener('touchend', () => {
+            isDrawing = false;
+        });
+
+        // --- Button Event Listeners ---
+        startButton.addEventListener('click', startGame);
+        clearButton.addEventListener('click', () => {
+            if (gameActive) { // Only allow clearing during active game
+                drawnLines = [];
+                // Redraw to show cleared canvas
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                drawScoringZones();
+                doodles.forEach(drawDoodle);
+            }
+        });
+        restartButton.addEventListener('click', startGame); // Restart button in message box
+
+        // Initial setup on page load
+        window.onload = function() {
+            setCanvasDimensions(); // Ensure canvas is sized correctly
+            // Show initial instructions
+            showMessage("Draw lines to block doodles! Guide them to the 'GOAL!' zones at the bottom.");
+            clearButton.disabled = true; // Disable clear button initially
+        };
+
+    </script>
+</body>
+</html>
